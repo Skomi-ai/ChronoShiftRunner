@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrono-Shift Runner</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            @apply bg-gray-900 text-gray-100 min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden;
+        }
+
+        #gameContainer {
+            @apply relative w-full max-w-2xl aspect-video bg-gray-800 rounded-xl shadow-2xl overflow-hidden;
+            border: 2px solid #4a00e0; /* Deep purple border */
+            box-shadow: 0 0 40px rgba(74, 0, 224, 0.6); /* Glowing shadow */
+        }
+
+        canvas {
+            @apply block w-full h-full;
+            background: linear-gradient(180deg, #1a0033 0%, #0d001a 100%); /* Deep space gradient */
+        }
+
+        #gameUI {
+            @apply absolute top-4 left-4 right-4 flex justify-between items-center text-lg font-bold font-orbitron;
+            color: #00ffff; /* Cyan for UI elements */
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+            z-index: 10;
+        }
+
+        .ui-section {
+            @apply flex items-center gap-2;
+        }
+
+        .ui-label {
+            @apply text-sm;
+        }
+
+        .bar-container {
+            @apply w-24 h-3 bg-gray-700 rounded-full overflow-hidden border border-gray-600;
+        }
+
+        .bar {
+            @apply h-full rounded-full transition-all duration-300 ease-out;
+        }
+
+        #timeShiftBar {
+            background: linear-gradient(90deg, #00ffff, #4a00e0); /* Cyan to purple gradient */
+        }
+
+        #dashCooldownBar {
+            background: linear-gradient(90deg, #ff8c00, #ff0000); /* Orange to red gradient */
+        }
+
+        #shieldDurationBar {
+            background: linear-gradient(90deg, #00ff00, #008000); /* Green gradient */
+        }
+
+        #gameOverScreen {
+            @apply absolute top-0 left-0 w-full h-full bg-gray-900 bg-opacity-90 flex flex-col items-center justify-center text-center z-20 opacity-0 invisible transition-opacity duration-500 ease-in-out;
+        }
+
+        #gameOverScreen.active {
+            @apply opacity-100 visible;
+        }
+
+        #gameOverScreen h2 {
+            @apply text-5xl font-extrabold font-orbitron mb-4;
+            color: #e0007d; /* Neon pink */
+            text-shadow: 0 0 20px rgba(224, 0, 125, 0.8);
+        }
+
+        #finalScore {
+            @apply text-3xl font-bold font-orbitron mb-8;
+            color: #00ff88; /* Neon green */
+            text-shadow: 0 0 15px rgba(0, 255, 136, 0.7);
+        }
+
+        #restartButton {
+            @apply px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white text-xl font-bold rounded-lg shadow-xl transition-all duration-300 ease-in-out;
+            box-shadow: 0 0 20px rgba(139, 0, 255, 0.5);
+        }
+
+        #restartButton:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0 30px rgba(139, 0, 255, 0.8);
+        }
+
+        /* Time-shift visual effect */
+        .time-shifted #gameCanvas {
+            filter: grayscale(80%) blur(1px) contrast(150%);
+            transition: filter 0.2s ease-out;
+        }
+        .time-shifted #gameUI {
+            color: #ff00ff; /* Magenta for UI */
+            text-shadow: 0 0 10px rgba(255, 0, 255, 0.8);
+        }
+
+        /* Custom Message Box Styling */
+        .message-box {
+            @apply fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gray-800 text-gray-100 p-6 rounded-lg shadow-2xl z-50 flex flex-col items-center text-center;
+            max-width: 90vw;
+            width: 400px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: none; /* Hidden by default */
+        }
+        .message-box h3 {
+            @apply text-xl font-bold text-purple-400 mb-3;
+        }
+        .message-box p {
+            @apply text-base mb-5;
+        }
+        .message-box button {
+            @apply bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-md font-semibold;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="gameUI">
+            <div class="ui-section">
+                <span class="ui-label">Score:</span> <span id="score">0</span>
+            </div>
+            <div class="ui-section">
+                <span class="ui-label">Time-Shift:</span>
+                <div id="timeShiftBarContainer" class="bar-container">
+                    <div id="timeShiftBar" class="bar"></div>
+                </div>
+            </div>
+            <div class="ui-section">
+                <span class="ui-label">Dash:</span>
+                <div id="dashCooldownBarContainer" class="bar-container">
+                    <div id="dashCooldownBar" class="bar"></div>
+                </div>
+            </div>
+            <div class="ui-section">
+                <span class="ui-label">Shield:</span>
+                <div id="shieldDurationBarContainer" class="bar-container">
+                    <div id="shieldDurationBar" class="bar"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="gameOverScreen">
+            <h2>GAME OVER!</h2>
+            <p id="finalScore">Final Score: 0</p>
+            <button id="restartButton">Restart Game</button>
+        </div>
+    </div>
+
+    <!-- Custom Message Box for alerts -->
+    <div id="messageBox" class="message-box">
+        <h3 id="messageBoxTitle"></h3>
+        <p id="messageBoxContent"></p>
+        <button id="messageBoxClose">OK</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <script>
+        // --- DOM Elements ---
+        const gameContainer = document.getElementById('gameContainer');
+        const gameCanvas = document.getElementById('gameCanvas');
+        const ctx = gameCanvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const timeShiftBar = document.getElementById('timeShiftBar');
+        const dashCooldownBar = document.getElementById('dashCooldownBar');
+        const shieldDurationBar = document.getElementById('shieldDurationBar');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const restartButton = document.getElementById('restartButton');
+
+        // Message box elements
+        const messageBox = document.getElementById('messageBox');
+        const messageBoxTitle = document.getElementById('messageBoxTitle');
+        const messageBoxContent = document.getElementById('messageBoxContent');
+        const messageBoxClose = document.getElementById('messageBoxClose');
+
+        /**
+         * Displays a custom message box instead of alert().
+         * @param {string} title - The title of the message box.
+         * @param {string} message - The content message.
+         */
+        function showMessageBox(title, message) {
+            messageBoxTitle.textContent = title;
+            messageBoxContent.textContent = message;
+            messageBox.style.display = 'flex';
+        }
+
+        // --- Game Constants ---
+        const PLAYER_SIZE = 20;
+        const PLAYER_SPEED_Y = 8; // Vertical movement speed
+        const OBSTACLE_SPEED_NORMAL = 3;
+        const OBSTACLE_SPEED_SLOW = 0.8;
+        const OBSTACLE_WIDTH_MIN = 30;
+        const OBSTACLE_WIDTH_MAX = 100;
+        const OBSTACLE_GAP_MIN = 80;
+        const OBSTACLE_GAP_MAX = 150;
+        const OBSTACLE_SPAWN_INTERVAL = 1000; // Milliseconds
+        const TIME_SHIFT_DURATION = 2000; // Milliseconds
+        const TIME_SHIFT_COOLDOWN = 5000; // Milliseconds
+        const TIME_SHIFT_MAX_CHARGE = 100; // Percentage
+
+        const DASH_DURATION = 300; // Milliseconds
+        const DASH_SPEED_MULTIPLIER = 5;
+        const DASH_COOLDOWN = 1500; // Milliseconds
+
+        const SHIELD_DURATION = 3000; // Milliseconds
+        const SHIELD_SPAWN_CHANCE = 0.1; // 10% chance for shield power-up
+
+        // Define NORMAL_SPEED
+        const NORMAL_SPEED = OBSTACLE_SPEED_NORMAL;
+
+        // --- Game State Variables ---
+        let animationFrameId;
+        let lastObstacleSpawnTime = 0;
+        let score = 0;
+        let gameOver = false;
+        let player; // Player object instance
+        let obstacles = [];
+        let collectibles = []; // New array for power-ups
+        let particles = []; // For effects like time-shift activation, collisions
+
+        let isTimeShiftActive = false;
+        let timeShiftStartTime = 0;
+        let timeShiftCharge = TIME_SHIFT_MAX_CHARGE;
+        let lastTimeShiftUsed = 0;
+
+        let isDashing = false;
+        let dashStartTime = 0;
+        let lastDashUsed = 0;
+
+        let isShieldActive = false;
+        let shieldStartTime = 0;
+
+        let gameSpeed = NORMAL_SPEED; // Initialize gameSpeed
+        let gameFrame = 0; // Initialize gameFrame for vertical moving obstacles
+
+        // --- Audio Setup (Tone.js) ---
+        let bgMusic;
+        let jumpSound, timeShiftSound, dashSound, collectSound, hitSound, gameOverSound;
+
+        /**
+         * Initializes Tone.js audio components.
+         */
+        async function initializeAudio() {
+            try {
+                if (Tone.context.state !== 'running') {
+                    await Tone.start();
+                    console.log("Tone.js audio context started.");
+                }
+
+                // Background Music (simple synth pad)
+                bgMusic = new Tone.Synth({
+                    oscillator: { type: "sine" },
+                    envelope: { attack: 2, decay: 0.5, sustain: 0.8, release: 2 }
+                }).toDestination();
+                bgMusic.volume.value = -20; // Lower volume for background
+
+                // Loop a simple chord progression for background music
+                const musicLoop = new Tone.Loop(time => {
+                    bgMusic.triggerAttackRelease(["C3", "E3", "G3"], "4n", time);
+                }, "2n").start(0);
+                Tone.Transport.start(); // Start Tone.js transport for loops
+
+                // Sound Effects
+                jumpSound = new Tone.MembraneSynth().toDestination();
+                jumpSound.volume.value = -10;
+
+                timeShiftSound = new Tone.NoiseSynth({
+                    noise: { type: "pink" },
+                    envelope: { attack: 0.01, decay: 0.1, sustain: 0.0, release: 0.2 }
+                }).toDestination();
+                timeShiftSound.volume.value = -10;
+
+                dashSound = new Tone.PluckSynth().toDestination();
+                dashSound.volume.value = -10;
+
+                collectSound = new Tone.Synth({
+                    oscillator: { type: "triangle" },
+                    envelope: { attack: 0.01, decay: 0.1, sustain: 0.0, release: 0.1 }
+                }).toDestination();
+                collectSound.volume.value = -10;
+
+                hitSound = new Tone.MetalSynth({
+                    frequency: 200, envelope: { attack: 0.001, decay: 0.2, sustain: 0.0, release: 0.1 },
+                    harmonicity: 3.1, modulationIndex: 16, resonance: 4000, octaves: 1.5
+                }).toDestination();
+                hitSound.volume.value = -8;
+
+                gameOverSound = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: "sawtooth" },
+                    envelope: { attack: 0.1, decay: 0.4, sustain: 0.0, release: 0.8 }
+                }).toDestination();
+                gameOverSound.volume.value = -5;
+
+            } catch (error) {
+                showMessageBox("Audio Error", `Failed to initialize audio: ${error.message}. Please ensure your browser supports Web Audio API.`);
+                console.error("Audio initialization error:", error);
+            }
+        }
+
+
+        // --- Classes ---
+
+        /**
+         * Represents a particle for visual effects (e.g., time-shift, collision).
+         */
+        class Particle {
+            constructor(x, y, radius, color, velocityX, velocityY, decay, glow = false) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.color = color;
+                this.velocityX = velocityX;
+                this.velocityY = velocityY;
+                this.alpha = 1;
+                this.decay = decay;
+                this.glow = glow;
+            }
+
+            update() {
+                this.x += this.velocityX;
+                this.y += this.velocityY;
+                this.alpha -= this.decay;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                if (this.glow) {
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = this.radius * 2;
+                }
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        /**
+         * Represents the player character.
+         */
+        class Player {
+            constructor() {
+                this.width = PLAYER_SIZE;
+                this.height = PLAYER_SIZE;
+                this.x = gameCanvas.width / 4;
+                this.y = gameCanvas.height / 2 - this.height / 2;
+                this.isMovingUp = false; // Flag for direct vertical movement
+                this.isMovingDown = false; // Flag for direct vertical movement
+                this.color = '#66d9ef'; // Cyan for player
+            }
+
+            /**
+             * Draws the player on the canvas.
+             */
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+
+                // Add a subtle border for definition
+                ctx.strokeStyle = '#33b5e5';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+                // Draw shield if active
+                if (isShieldActive) {
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width * 0.8, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(0, 255, 0, 0.7)'; // Green shield
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = 'rgba(0, 255, 0, 0.9)';
+                    ctx.shadowBlur = 15;
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            /**
+             * Updates player's position based on movement flags.
+             */
+            update() {
+                if (this.isMovingUp) {
+                    this.y -= PLAYER_SPEED_Y;
+                } else if (this.isMovingDown) {
+                    this.y += PLAYER_SPEED_Y;
+                }
+
+                // Clamp player position to stay within vertical bounds (including ground)
+                this.y = Math.max(0, Math.min(gameCanvas.height - this.height - 20, this.y));
+            }
+
+            /**
+             * Activates the dash ability.
+             */
+            dash() {
+                if (!isDashing && Date.now() - lastDashUsed > DASH_COOLDOWN) {
+                    isDashing = true;
+                    dashStartTime = Date.now();
+                    lastDashUsed = Date.now();
+                    if (dashSound) dashSound.triggerAttackRelease("G3", "16n");
+                    // Create dash particles
+                    for (let i = 0; i < 10; i++) {
+                        particles.push(new Particle(this.x + this.width / 2, this.y + this.height / 2, Math.random() * 3 + 1, '#ff8c00', (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5, 0.05, true));
+                    }
+                } else if (Date.now() - lastDashUsed <= DASH_COOLDOWN) {
+                    showMessageBox("Cooldown", `Dash is on cooldown. Remaining: ${Math.ceil((DASH_COOLDOWN - (Date.now() - lastDashUsed)) / 1000)}s`);
+                }
+            }
+        }
+
+        /**
+         * Represents an obstacle (top and bottom parts).
+         */
+        class Obstacle {
+            constructor(gapY, gapHeight, type = 'static') {
+                this.x = gameCanvas.width; // Starts off-screen to the right
+                this.width = OBSTACLE_WIDTH_MIN + Math.random() * (OBSTACLE_WIDTH_MAX - OBSTACLE_WIDTH_MIN);
+                this.gapY = gapY; // Y position of the gap's top
+                this.gapHeight = gapHeight; // Height of the gap
+                this.color = '#ff6b6b'; // Red for obstacles
+                this.type = type;
+
+                // For moving obstacles
+                this.initialY = gapY;
+                this.moveAmplitude = Math.random() * 50 + 20; // How much it moves vertically
+                this.moveSpeed = Math.random() * 0.05 + 0.01; // How fast it moves vertically
+                this.offset = Math.random() * Math.PI * 2; // To make movement unique
+            }
+
+            /**
+             * Draws the obstacle on the canvas.
+             */
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 15;
+
+                // Top part
+                ctx.fillRect(this.x, 0, this.width, this.gapY);
+                // Bottom part
+                ctx.fillRect(this.x, this.gapY + this.gapHeight, this.width, gameCanvas.height - (this.gapY + this.gapHeight));
+                ctx.shadowBlur = 0; // Reset shadow
+            }
+
+            /**
+             * Updates obstacle's position.
+             */
+            update() {
+                let currentSpeed = isTimeShiftActive ? OBSTACLE_SPEED_SLOW : OBSTACLE_SPEED_NORMAL;
+                if (isDashing) {
+                    currentSpeed *= DASH_SPEED_MULTIPLIER; // Obstacles move faster when dashing
+                }
+                this.x -= currentSpeed;
+
+                // Apply vertical movement for 'moving-vertical' type
+                if (this.type === 'moving-vertical') {
+                    this.gapY = this.initialY + Math.sin(gameFrame * this.moveSpeed + this.offset) * this.moveAmplitude;
+                    // Ensure obstacles stay within bounds
+                    this.gapY = Math.max(0, Math.min(this.gapY, gameCanvas.height - this.gapHeight));
+                }
+            }
+        }
+
+        /**
+         * Represents a collectible power-up.
+         */
+        class Collectible {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.radius = 10;
+                this.type = type; // 'timeShiftBoost', 'shield', 'scoreMultiplier'
+                this.color = this.getColorByType(type);
+                this.collected = false;
+            }
+
+            getColorByType(type) {
+                switch (type) {
+                    case 'timeShiftBoost': return '#00ffff'; // Cyan
+                    case 'shield': return '#00ff00'; // Green
+                    case 'scoreMultiplier': return '#ffea00'; // Yellow
+                    default: return '#ffffff';
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Draw a symbol for the power-up
+                ctx.fillStyle = '#000000';
+                ctx.font = '12px Arial'; // Font size for collectible symbol
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                let symbol = '';
+                switch (this.type) {
+                    case 'timeShiftBoost': symbol = 'T'; break;
+                    case 'shield': symbol = 'S'; break;
+                    case 'scoreMultiplier': symbol = 'X'; break;
+                }
+                ctx.fillText(symbol, this.x, this.y);
+            }
+
+            update(speed) {
+                this.x -= speed;
+            }
+        }
+
+        // --- Background Layer Class ---
+        class BackgroundLayer {
+            constructor(speed, color, count, sizeMin, sizeMax) {
+                this.speed = speed;
+                this.color = color;
+                this.elements = [];
+                for (let i = 0; i < count; i++) {
+                    this.elements.push({
+                        x: Math.random() * gameCanvas.width,
+                        y: Math.random() * gameCanvas.height,
+                        size: Math.random() * (sizeMax - sizeMin) + sizeMin
+                    });
+                }
+            }
+
+            update() {
+                let currentSpeed = this.speed;
+                if (isTimeShiftActive) {
+                    currentSpeed *= OBSTACLE_SPEED_SLOW / OBSTACLE_SPEED_NORMAL; // Scale background speed with time shift
+                }
+                if (isDashing) {
+                    currentSpeed *= DASH_SPEED_MULTIPLIER; // Scale background speed with dash
+                }
+
+                this.elements.forEach(el => {
+                    el.x -= currentSpeed;
+                    if (el.x + el.size < 0) {
+                        el.x = gameCanvas.width + el.size; // Wrap around
+                        el.y = Math.random() * gameCanvas.height; // New random Y
+                    }
+                });
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                this.elements.forEach(el => {
+                    ctx.beginPath();
+                    ctx.arc(el.x, el.y, el.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+        }
+
+        let backgroundLayers = []; // Array to hold background layers
+
+        // --- Game Functions ---
+
+        /**
+         * Initializes or resets the game state.
+         */
+        function initGame() {
+            score = 0;
+            gameOver = false;
+            player = new Player(); // Re-initialize player
+            obstacles = [];
+            collectibles = [];
+            particles = [];
+
+            isTimeShiftActive = false;
+            timeShiftStartTime = 0;
+            timeShiftCharge = TIME_SHIFT_MAX_CHARGE;
+            lastTimeShiftUsed = 0;
+
+            isDashing = false;
+            dashStartTime = 0;
+            lastDashUsed = 0;
+
+            isShieldActive = false;
+            shieldStartTime = 0;
+
+            gameSpeed = NORMAL_SPEED;
+            gameFrame = 0;
+
+            // Initialize background layers
+            backgroundLayers = [
+                new BackgroundLayer(0.5, 'rgba(255,255,255,0.1)', 50, 1, 3), // Distant stars
+                new BackgroundLayer(1.5, 'rgba(255,255,255,0.2)', 30, 2, 5), // Closer stars
+                new BackgroundLayer(3, 'rgba(100,100,255,0.15)', 20, 3, 7) // Nebulae/dust
+            ];
+
+
+            updateTimeShiftBar();
+            updateDashCooldownBar();
+            updateShieldDurationBar();
+            scoreDisplay.textContent = score;
+            gameOverScreen.classList.remove('active');
+            gameContainer.classList.remove('time-shifted'); // Ensure filter is off
+
+            if (bgMusic) {
+                bgMusic.volume.value = -20; // Ensure music is playing
+                Tone.Transport.start(); // Ensure transport is started for music loop
+            }
+        }
+
+        /**
+         * Updates the time-shift bar display.
+         */
+        function updateTimeShiftBar() {
+            timeShiftBar.style.width = `${timeShiftCharge}%`;
+            if (timeShiftCharge < 30) {
+                timeShiftBar.style.backgroundColor = '#e74c3c'; /* Red */
+            } else if (timeShiftCharge < 60) {
+                timeShiftBar.style.backgroundColor = '#f1c40f'; /* Yellow */
+            } else {
+                timeShiftBar.style.background = 'linear-gradient(90deg, #00ffff, #4a00e0)'; /* Cyan to purple */
+            }
+        }
+
+        /**
+         * Updates the dash cooldown bar display.
+         */
+        function updateDashCooldownBar() {
+            const dashProgress = Math.min(1, (Date.now() - lastDashUsed) / DASH_COOLDOWN) * 100;
+            dashCooldownBar.style.width = `${dashProgress}%`;
+            if (dashProgress < 100) {
+                dashCooldownBar.style.background = 'linear-gradient(90deg, #ff8c00, #ff0000)';
+            } else {
+                dashCooldownBar.style.background = 'linear-gradient(90deg, #00ff88, #008000)'; /* Ready color */
+            }
+        }
+
+        /**
+         * Updates the shield duration bar display.
+         */
+        function updateShieldDurationBar() {
+            if (isShieldActive) {
+                const shieldRemaining = SHIELD_DURATION - (Date.now() - shieldStartTime);
+                const shieldProgress = Math.max(0, (shieldRemaining / SHIELD_DURATION) * 100);
+                shieldDurationBar.style.width = `${shieldProgress}%`;
+                shieldDurationBar.style.background = 'linear-gradient(90deg, #00ff00, #008000)';
+            } else {
+                shieldDurationBar.style.width = '0%';
+                shieldDurationBar.style.background = 'none';
+            }
+        }
+
+
+        /**
+         * Spawns a new obstacle.
+         */
+        function spawnObstacle() {
+            const gapHeight = OBSTACLE_GAP_MIN + Math.random() * (OBSTACLE_GAP_MAX - OBSTACLE_GAP_MIN);
+            const gapY = Math.random() * (gameCanvas.height - gapHeight); // Random Y position for the gap
+            const obstacleType = Math.random() < 0.3 ? 'moving-vertical' : 'static'; // 30% chance for moving obstacle
+            obstacles.push(new Obstacle(gapY, gapHeight, obstacleType));
+
+            // Potentially spawn a collectible with the obstacle
+            if (Math.random() < SHIELD_SPAWN_CHANCE) {
+                const collectibleType = ['timeShiftBoost', 'shield', 'scoreMultiplier'][Math.floor(Math.random() * 3)];
+                collectibles.push(new Collectible(gameCanvas.width + obstacles[obstacles.length - 1].width / 2, gapY + gapHeight / 2, collectibleType));
+            }
+        }
+
+        /**
+         * Creates explosion particles for collisions.
+         * @param {number} x - X coordinate.
+         * @param {number} y - Y coordinate.
+         * @param {string} color - Color of particles.
+         * @param {number} count - Number of particles.
+         */
+        function createCollisionParticles(x, y, color, count = 15) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 4 + 1;
+                const velocityX = Math.cos(angle) * speed;
+                const velocityY = Math.sin(angle) * speed;
+                const radius = Math.random() * 3 + 1;
+                particles.push(new Particle(x, y, radius, color, velocityX, velocityY, 0.08, true));
+            }
+        }
+
+        /**
+         * Checks for collision between player and an object (obstacle or collectible).
+         * @param {object} playerRect - Player's bounding box {x, y, width, height}.
+         * @param {object} obj - Object with x, y, width/radius, height.
+         * @returns {boolean} True if colliding, false otherwise.
+         */
+        function checkCollision(playerRect, obj) {
+            // For obstacles
+            if (obj instanceof Obstacle) {
+                // Check collision with top part
+                if (playerRect.x < obj.x + obj.width &&
+                    playerRect.x + playerRect.width > obj.x &&
+                    playerRect.y < obj.gapY &&
+                    playerRect.y + playerRect.height > 0) {
+                    return true;
+                }
+                // Check collision with bottom part
+                if (playerRect.x < obj.x + obj.width &&
+                    playerRect.x + playerRect.width > obj.x &&
+                    playerRect.y < obj.gapY + obj.gapHeight + (gameCanvas.height - (obj.gapY + obj.gapHeight)) && /* Adjusted for full height */
+                    playerRect.y + playerRect.height > obj.gapY + obj.gapHeight) {
+                    return true;
+                }
+                return false;
+            }
+            // For collectibles (circular collision)
+            if (obj instanceof Collectible) {
+                const dx = playerRect.x + playerRect.width / 2 - obj.x;
+                const dy = playerRect.y + playerRect.height / 2 - obj.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                return distance < playerRect.width / 2 + obj.radius;
+            }
+            return false;
+        }
+
+
+        /**
+         * Main game update logic.
+         */
+        function update() {
+            if (gameOver) return;
+
+            const currentTime = Date.now();
+
+            // Update background layers
+            backgroundLayers.forEach(layer => layer.update());
+
+            // Handle time-shift activation/deactivation
+            if (isTimeShiftActive && currentTime - timeShiftStartTime > TIME_SHIFT_DURATION) {
+                isTimeShiftActive = false;
+                gameContainer.classList.remove('time-shifted');
+            }
+
+            // Recharge time-shift
+            if (!isTimeShiftActive && timeShiftCharge < TIME_SHIFT_MAX_CHARGE && (currentTime - lastTimeShiftUsed > TIME_SHIFT_COOLDOWN || lastTimeShiftUsed === 0)) {
+                timeShiftCharge = Math.min(TIME_SHIFT_MAX_CHARGE, timeShiftCharge + (TIME_SHIFT_MAX_CHARGE / (TIME_SHIFT_COOLDOWN / 100)));
+                updateTimeShiftBar();
+            }
+
+            // Handle dash activation/deactivation
+            if (isDashing && currentTime - dashStartTime > DASH_DURATION) {
+                isDashing = false;
+            }
+            updateDashCooldownBar(); // Update dash cooldown visual
+
+            // Handle shield duration
+            if (isShieldActive && currentTime - shieldStartTime > SHIELD_DURATION) {
+                isShieldActive = false;
+            }
+            updateShieldDurationBar(); // Update shield duration visual
+
+
+            const currentObstacleSpeed = isTimeShiftActive ? OBSTACLE_SPEED_SLOW : OBSTACLE_SPEED_NORMAL;
+
+            // Spawn obstacles
+            if (currentTime - lastObstacleSpawnTime > OBSTACLE_SPAWN_INTERVAL / (isTimeShiftActive ? 0.5 : 1)) {
+                spawnObstacle();
+                lastObstacleSpawnTime = currentTime;
+            }
+
+            // Update player
+            player.update();
+
+            // Update and filter obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obstacle = obstacles[i];
+                obstacle.update(); // Obstacles update their own speed based on game state
+
+                // Check if obstacle is off-screen
+                if (obstacle.x + obstacle.width < 0) {
+                    obstacles.splice(i, 1);
+                    continue;
+                }
+
+                // Check for scoring
+                if (!obstacle.passed && obstacle.x + obstacle.width < player.x) {
+                    score += 10;
+                    scoreDisplay.textContent = score;
+                    obstacle.passed = true;
+                }
+
+                // Check for collision with player
+                const playerRect = { x: player.x, y: player.y, width: player.width, height: player.height };
+                if (checkCollision(playerRect, obstacle)) {
+                    if (isShieldActive) {
+                        isShieldActive = false; // Shield absorbs one hit
+                        createCollisionParticles(obstacle.x + obstacle.width / 2, obstacle.gapY + obstacle.gapHeight / 2, '#00ff00', 10); // Green particles for shield absorption
+                        obstacles.splice(i, 1); // Obstacle is destroyed by shield
+                        if (hitSound) hitSound.triggerAttackRelease("C5", "8n"); // Shield hit sound
+                    } else {
+                        createCollisionParticles(player.x + player.width / 2, player.y + player.height / 2, '#e0007d', 30);
+                        if (hitSound) hitSound.triggerAttackRelease("C3", "8n"); // Player hit sound
+                        endGame();
+                        return;
+                    }
+                }
+            }
+
+            // Update and filter collectibles
+            for (let i = collectibles.length - 1; i >= 0; i--) {
+                const collectible = collectibles[i];
+                let currentCollectibleSpeed = isTimeShiftActive ? OBSTACLE_SPEED_SLOW : OBSTACLE_SPEED_NORMAL;
+                if (isDashing) {
+                    currentCollectibleSpeed *= DASH_SPEED_MULTIPLIER;
+                }
+                collectible.update(currentCollectibleSpeed);
+
+                // Remove off-screen collectibles
+                if (collectible.x + collectible.radius < 0) {
+                    collectibles.splice(i, 1);
+                    continue;
+                }
+
+                // Check for collection by player
+                const playerRect = { x: player.x, y: player.y, width: player.width, height: player.height };
+                if (checkCollision(playerRect, collectible)) {
+                    if (collectSound) collectSound.triggerAttackRelease("E5", "16n");
+                    switch (collectible.type) {
+                        case 'timeShiftBoost':
+                            timeShiftCharge = Math.min(TIME_SHIFT_MAX_CHARGE, timeShiftCharge + 25); // Boost by 25%
+                            updateTimeShiftBar();
+                            showMessageBox("Power-Up!", "Time-Shift charge boosted!");
+                            break;
+                        case 'shield':
+                            isShieldActive = true;
+                            shieldStartTime = Date.now();
+                            showMessageBox("Power-Up!", "Shield activated!");
+                            break;
+                        case 'scoreMultiplier':
+                            score += 50; // Bonus score
+                            scoreDisplay.textContent = score;
+                            showMessageBox("Power-Up!", "Score Multiplier! +50 points!");
+                            break;
+                    }
+                    collectibles.splice(i, 1); // Remove collected item
+                }
+            }
+
+            // Update and filter particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const particle = particles[i];
+                particle.update();
+                if (particle.alpha <= 0.05 || particle.radius <= 0.5) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            gameFrame++;
+        }
+
+        /**
+         * Main game drawing logic.
+         */
+        function draw() {
+            ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height); // Clear canvas
+
+            // Draw background layers
+            for (const layer of backgroundLayers) {
+                layer.draw();
+            }
+
+            // Draw ground
+            ctx.fillStyle = '#34495e'; // Darker blue-grey for ground
+            ctx.fillRect(0, gameCanvas.height - 20, gameCanvas.width, 20);
+
+            // Draw obstacles
+            obstacles.forEach(o => o.draw());
+
+            // Draw collectibles
+            collectibles.forEach(c => c.draw());
+
+            // Draw player
+            player.draw();
+
+            // Draw particles
+            particles.forEach(p => p.draw());
+        }
+
+        /**
+         * The main game loop.
+         */
+        function gameLoop() {
+            update();
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        /**
+         * Ends the game and displays the game over screen.
+         */
+        function endGame() {
+            gameOver = true;
+            cancelAnimationFrame(animationFrameId);
+            finalScoreDisplay.textContent = `Final Score: ${score}`;
+            gameOverScreen.classList.add('active');
+            gameContainer.classList.remove('time-shifted'); // Ensure filter is off
+            if (bgMusic) bgMusic.volume.value = -Infinity; // Mute music
+            if (gameOverSound) gameOverSound.triggerAttackRelease(["C3", "G2", "C2"], "1s"); // Play game over chord
+        }
+
+        // --- Event Listeners ---
+
+        /**
+         * Handles player vertical movement and ability activation.
+         * @param {KeyboardEvent} event - The keyboard event.
+         */
+        document.addEventListener('keydown', (event) => {
+            if (gameOver) return;
+
+            if (event.key === 'ArrowUp' || event.key === 'w') {
+                player.isMovingUp = true;
+            } else if (event.key === 'ArrowDown' || event.key === 's') {
+                player.isMovingDown = true;
+            } else if (event.key === ' ') { // Space for time-shift
+                if (!isTimeShiftActive && timeShiftCharge === TIME_SHIFT_MAX_CHARGE) {
+                    isTimeShiftActive = true;
+                    timeShiftStartTime = Date.now();
+                    timeShiftCharge = 0; // Deplete charge
+                    lastTimeShiftUsed = Date.now(); // Start cooldown
+                    updateTimeShiftBar();
+                    gameContainer.classList.add('time-shifted'); // Apply visual filter
+                    if (timeShiftSound) timeShiftSound.triggerAttackRelease("C5", "0.2");
+                    // Create time-shift activation particles
+                    for (let i = 0; i < 20; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = Math.random() * 5 + 2;
+                        const velocityX = Math.cos(angle) * speed;
+                        const velocityY = Math.sin(angle) * speed;
+                        particles.push(new Particle(player.x + player.width / 2, player.y + player.height / 2, Math.random() * 4 + 2, '#ff00ff', velocityX, velocityY, 0.05, true));
+                    }
+                } else if (timeShiftCharge < TIME_SHIFT_MAX_CHARGE) {
+                    showMessageBox("Time-Shift", "Time-Shift is recharging!");
+                }
+            } else if (event.key === 'd' || event.key === 'ArrowRight') { // 'd' or Right Arrow for Dash
+                player.dash();
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            if (gameOver) return;
+
+            if (event.key === 'ArrowUp' || event.key === 'w') {
+                player.isMovingUp = false;
+            } else if (event.key === 'ArrowDown' || event.key === 's') {
+                player.isMovingDown = false;
+            }
+        });
+
+        // Touch controls for vertical movement and abilities
+        let touchStartY = 0;
+        gameCanvas.addEventListener('touchstart', (e) => {
+            if (gameOver) return;
+            e.preventDefault(); // Prevent default touch actions like scrolling/zooming
+            touchStartY = e.touches[0].clientY;
+            // No jump or time-shift on simple tap by default now.
+            // If a specific touch gesture for time-shift is desired, it can be added here.
+        });
+
+        gameCanvas.addEventListener('touchmove', (e) => {
+            if (gameOver) return;
+            e.preventDefault(); // Prevent default scrolling
+            const touchCurrentY = e.touches[0].clientY;
+            const deltaY = touchCurrentY - touchStartY;
+
+            // Determine if moving up or down based on swipe direction
+            if (deltaY < 0) { // Swiping up
+                player.isMovingUp = true;
+                player.isMovingDown = false;
+            } else if (deltaY > 0) { // Swiping down
+                player.isMovingDown = true;
+                player.isMovingUp = false;
+            } else { // No significant vertical movement
+                player.isMovingUp = false;
+                player.isMovingDown = false;
+            }
+
+            // Directly adjust player.y based on touch movement, but let player.update handle clamping
+            player.y += deltaY * 0.5; // Sensitivity for touch
+
+            touchStartY = touchCurrentY; // Update start Y for continuous movement
+        });
+
+        gameCanvas.addEventListener('touchend', () => {
+            if (gameOver) return;
+            player.isMovingUp = false;
+            player.isMovingDown = false;
+        });
+
+
+        restartButton.addEventListener('click', () => {
+            initGame();
+            gameLoop();
+        });
+
+        messageBoxClose.addEventListener('click', () => {
+            messageBox.style.display = 'none';
+        });
+
+        /**
+         * Resizes the canvas to fit its container while maintaining aspect ratio.
+         */
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+
+            // Maintain 16:9 aspect ratio for the game content
+            const aspectRatio = 16 / 9;
+            let newWidth = containerWidth;
+            let newHeight = containerWidth / aspectRatio;
+
+            if (newHeight > containerHeight) {
+                newHeight = containerHeight;
+                newWidth = containerHeight * aspectRatio;
+            }
+
+            // Set internal canvas resolution (e.g., 800x450 for game logic)
+            const gameWidth = 800;
+            const gameHeight = gameWidth / aspectRatio;
+            gameCanvas.width = gameWidth;
+            gameCanvas.height = gameHeight;
+
+            // Center player on resize if game is not over
+            if (player && !gameOver) {
+                player.x = gameCanvas.width / 4;
+                player.y = gameCanvas.height / 2 - player.height / 2;
+            }
+        }
+
+        // --- Initial Setup ---
+        window.onload = async function() {
+            resizeCanvas(); // Set initial canvas size
+            await initializeAudio(); // Initialize audio first
+            initGame();     // Initialize game state
+            gameLoop();     // Start the game loop
+        };
+
+        window.addEventListener('resize', resizeCanvas); // Adjust canvas on window resize
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
