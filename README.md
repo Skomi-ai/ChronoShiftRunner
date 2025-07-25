@@ -1,1 +1,1 @@
-This project is also a game written in 3 different programming languages 
+This project is also a game written in 3 different programming languages, HTML, CSS, JAVASCRIPT. In the game the player needs to use the arrow keyes to get past the incoming obstacles. If you manage to touch these obstacles the game ends and you will have to click the start over button to play the game again.
